@@ -1,0 +1,147 @@
+---
+title: "task 2"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2024-03-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(jsonlite)
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(caret)
+library(gridExtra)
+require(nnet)
+
+
+
+```
+
+## Problem 2
+
+Utilize the attached market price data for livestock to fit a model of your choice, determining the advantages or disadvantages of selling at a specific point. Begin with an exploratory analysis to guide your model fitting process. The objective is to demonstrate the benefits of selling earlier to mitigate price declines resulting from drought, employing modeling techniques, data products, and innovative visuals:
+
+```{r ,echo=T}
+MPrices_2022 <- read_excel("Makert Prices 2022.xlsx")
+
+ glimpse (MPrices_2022)
+table(MPrices_2022$Seasons)
+
+MPrices_2022 <- MPrices_2022%>%
+  mutate (Seasons_1 = case_when(Seasons %in% c("drought","Drought")~ "Drought",
+                             Seasons %in% c("dry","Dry")~"Dry",
+                             Seasons %in% c("wet","Wet")~"Wet"))                    #rename
+
+MPrices_2022 %>% 
+  count(Seasons,Seasons_1)#renamed well
+
+MPrices <- MPrices_2022 %>% 
+  group_by(Seasons_1)%>%
+  mutate(bull_average= mean(Bull))%>%
+  mutate(cow_average= mean(Cow))%>%
+  mutate(heifer_average= mean(Heifer))%>%
+  mutate(steer_average= mean(Steer))
+  
+  
+#  colnames(MPrices_2022)
+#trend graph for the species over the various season
+  
+bull<- MPrices %>% 
+    ggplot(aes(x=Seasons_1,y=Bull/100000))+geom_col(aes(fill=Seasons_1))+
+    scale_fill_manual(values = c("pink", "#E7B800", "grey"))+
+  labs(x ="Season" , y="Bull in millions") +theme_bw()+
+  theme(legend.position="none")
+
+ggsave("bull.png",dpi=700)   
+  
+cow<- MPrices %>% 
+    ggplot(aes(x=Seasons_1,y=Cow/100000))+geom_col(aes(fill=Seasons_1))+
+    scale_fill_manual(values = c("pink", "#E7B800", "grey"))+
+  labs(x ="Season" , y="Cow in millions") +theme_bw()+
+ theme(legend.position="none")
+
+
+ggsave("cow.png",dpi=700) 
+
+heifer<- MPrices %>% 
+    ggplot(aes(x=Seasons_1,y=Heifer/100000))+geom_col(aes(fill=Seasons_1))+
+    scale_fill_manual(values = c("pink", "#E7B800", "grey"))+
+  labs(x ="Season" , y="Heifer in millions") +theme_bw()+
+  theme(legend.position="none")
+
+ggsave("heifer.png",dpi=700) 
+
+steer<- MPrices %>% 
+    ggplot(aes(x=Seasons_1,y=Steer/100000))+geom_col(aes(fill=Seasons_1))+
+    scale_fill_manual(values = c("pink", "#E7B800", "grey"))+
+  labs(x ="Season" , y="Steer in millions") +theme_bw()+
+  theme(legend.position="none")
+
+ggsave("steer.png",dpi=700)   
+
+plot_1<- bull +heifer+cow+steer
+
+ggsave("plot_1.png",dpi=700)   
+
+plot_1
+
+```
+
+
+
+```{r, regression}
+
+
+p1 <- ggplot(MPrices, aes(x=Seasons_1,y=Bull, fill=Seasons_1)) + geom_boxplot()  
+p2 <- ggplot(MPrices, aes(x=Seasons_1,y=Heifer, fill=Seasons_1)) + geom_boxplot() 
+p3 <- ggplot(MPrices, aes(x=Seasons_1,y=Cow, fill=Seasons_1)) + geom_boxplot()
+p4<- ggplot(MPrices, aes(x=Seasons_1,y=Steer, fill=Seasons_1)) + geom_boxplot()
+
+ grid.arrange(p1, p2, p3,p4, ncol=2)
+ 
+# data has outliers 
+
+MPrices$Seasons_1 <- as.factor(MPrices$Seasons_1)
+ levels( MPrices$Seasons_1)
+
+MPrices$Seasons_1 <- relevel(MPrices$Seasons_1, ref = "Wet")
+
+
+#Model fitting
+model <- multinom(Seasons_1 ~ Bull+Cow+Heifer+Steer, data = MPrices)
+
+summary(model)
+
+#predictions
+index <- createDataPartition(MPrices$Seasons_1, p = .70, list = FALSE)
+train <- MPrices[index,]
+test <- MPrices[-index,]
+
+
+# Predicting values for train dataset
+train$ClassPredicted <- predict(model, newdata = train, "class")
+tab <- table(train$Seasons_1, train$ClassPredicted)                     # classification table
+#round((sum(diag(tab))/sum(tab))*100,2)                                # Calculating accuracy
+
+
+# Predicting values for test dataset
+test$ClassPredicted <- predict(model, newdata = test, "class")
+tab1 <- table(test$Seasons_1, test$ClassPredicted)
+#round((sum(diag(tab1))/sum(tab1))*100,2)
+
+######################
+pred <-predict(model,MPrices,type='class')
+mean(pred==MPrices$Seasons_1)
+confusionMatrix(pred,MPrices$Seasons_1)
+
+
+
+
+```
+
+
